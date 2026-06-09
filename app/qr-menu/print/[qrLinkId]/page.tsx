@@ -8,21 +8,43 @@ type QrPrintPageProps = {
   params: Promise<{ qrLinkId: string }>;
 };
 
+type QrPrintData = {
+  id: string;
+  restaurant_id: string;
+  menu_id: string | null;
+  table_number: string | null;
+  destination_type: "restaurant" | "menu";
+  destination_url: string;
+  restaurant_name: string;
+  restaurant_logo_path: string | null;
+};
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-async function createSignedLogoUrl(path: string | null) {
+function debugQrPrint(step: string, details: Record<string, unknown>) {
+  if (process.env.ATLAS_QR_PRINT_DEBUG === "1") {
+    console.log("[atlas:qr-print]", step, details);
+  }
+}
+
+async function createSignedLogoUrl(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  path: string | null,
+) {
   if (!path) return null;
 
-  const supabase = await createClient();
   const { data } = await supabase.storage.from("restaurant-assets").createSignedUrl(path, 60 * 30);
   return data?.signedUrl ?? null;
 }
 
 export default async function QrPrintPage({ params }: QrPrintPageProps) {
   const { qrLinkId } = await params;
+  debugQrPrint("route-param", { qrLinkId });
+
   if (!isUuid(qrLinkId)) {
+    debugQrPrint("invalid-param", { qrLinkId });
     notFound();
   }
 
@@ -30,44 +52,39 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  debugQrPrint("auth", { hasUser: Boolean(user), userId: user?.id });
 
   if (!user) {
     redirect("/login");
   }
 
-  const { data: qrLink } = await supabase
-    .from("qr_links")
-    .select("id, restaurant_id, table_number, destination_url")
-    .eq("id", qrLinkId)
-    .maybeSingle();
-
-  if (!qrLink) {
-    notFound();
-  }
-
-  const { data: membership } = await supabase
+  const { data: memberships, error: membershipsError } = await supabase
     .from("restaurant_members")
-    .select("role")
-    .eq("restaurant_id", qrLink.restaurant_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .select("restaurant_id")
+    .eq("user_id", user.id);
+  debugQrPrint("memberships", {
+    count: memberships?.length ?? 0,
+    error: membershipsError?.message ?? null,
+  });
 
-  if (!membership) {
+  const { data, error } = await supabase.rpc("get_qr_print_card", {
+    qr_link_id_input: qrLinkId,
+  });
+
+  debugQrPrint("qr-print-rpc", {
+    qrLinkId,
+    found: Boolean(data),
+    error: error?.message ?? null,
+    restaurantId: data && typeof data === "object" && "restaurant_id" in data ? data.restaurant_id : null,
+  });
+
+  if (error || !data) {
     notFound();
   }
 
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("name, logo_path")
-    .eq("id", qrLink.restaurant_id)
-    .maybeSingle();
-
-  if (!restaurant) {
-    notFound();
-  }
-
+  const qrLink = data as QrPrintData;
   const [logoUrl, qrDataUrl] = await Promise.all([
-    createSignedLogoUrl(restaurant.logo_path),
+    createSignedLogoUrl(supabase, qrLink.restaurant_logo_path),
     QRCode.toDataURL(qrLink.destination_url, {
       margin: 2,
       width: 720,
@@ -78,10 +95,11 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
       errorCorrectionLevel: "M",
     }),
   ]);
+  debugQrPrint("assets", { hasLogoPath: Boolean(qrLink.restaurant_logo_path), hasSignedLogo: Boolean(logoUrl) });
 
   return (
     <QrPrintCard
-      restaurantName={restaurant.name}
+      restaurantName={qrLink.restaurant_name}
       logoUrl={logoUrl}
       destinationUrl={qrLink.destination_url}
       tableNumber={qrLink.table_number}
