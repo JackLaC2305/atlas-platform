@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import QRCode from "qrcode";
 
-import { createQrLinkAction, type QrActionState } from "@/app/qr-menu/actions";
+import { createQrLinkAction, deleteQrLinkAction, type QrActionState } from "@/app/qr-menu/actions";
 import type { QrLink, QrManagementData } from "@/lib/qr/types";
 
 const initialState: QrActionState = { status: "idle", message: "" };
@@ -28,10 +28,16 @@ function QrCodeCard({
   link,
   restaurantName,
   logoUrl,
+  canManage,
+  onDelete,
+  isDeleting,
 }: {
   link: QrLink;
   restaurantName: string;
   logoUrl: string | null;
+  canManage: boolean;
+  onDelete: (linkId: string) => void;
+  isDeleting: boolean;
 }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
 
@@ -92,7 +98,18 @@ function QrCodeCard({
             >
               Print Card
             </button>
+            <button
+              type="button"
+              disabled={!canManage || isDeleting}
+              onClick={() => onDelete(link.id)}
+              className="inline-flex min-h-10 items-center justify-center rounded-sm border border-red-200 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
           </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Deleting removes this QR link from Atlas. It does not delete the menu or restaurant.
+          </p>
         </div>
         <div className="w-full rounded-sm border border-slate-200 bg-white p-5 text-center lg:w-64">
           {logoUrl ? (
@@ -118,10 +135,51 @@ function QrCodeCard({
 
 export function QrMenuManagement({ data }: { data: QrManagementData }) {
   const [state, formAction, pending] = useActionState(createQrLinkAction, initialState);
+  const [deleteState, setDeleteState] = useState<QrActionState>(initialState);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [, startDeleteTransition] = useTransition();
   const [destinationType, setDestinationType] = useState<"restaurant" | "menu">("restaurant");
   const restaurantUrl = `${data.origin}/r/${data.restaurant.slug}`;
   const hasPublishedMenus = data.publishedMenus.length > 0;
   const menuOptions = useMemo(() => data.publishedMenus, [data.publishedMenus]);
+  const qrLinks = useMemo(
+    () => data.qrLinks.filter((link) => !deletedIds.has(link.id)),
+    [data.qrLinks, deletedIds],
+  );
+
+  function handleDelete(linkId: string) {
+    if (!window.confirm("Delete this QR code? Existing printed copies may stop working.")) {
+      return;
+    }
+
+    setDeletingId(linkId);
+    startDeleteTransition(() => {
+      const formData = new FormData();
+      formData.set("restaurantId", data.restaurant.id);
+      formData.set("qrLinkId", linkId);
+
+      void deleteQrLinkAction(initialState, formData)
+        .then((result) => {
+          setDeleteState(result);
+
+          const deletedId = result.deletedId;
+          if (result.status === "success" && deletedId) {
+            setDeletedIds((current) => {
+              const next = new Set(current);
+              next.add(deletedId);
+              return next;
+            });
+          }
+        })
+        .catch(() => {
+          setDeleteState({ status: "error", message: "QR link could not be deleted." });
+        })
+        .finally(() => {
+          setDeletingId(null);
+        });
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -187,9 +245,18 @@ export function QrMenuManagement({ data }: { data: QrManagementData }) {
         </aside>
 
         <main className="space-y-5">
-          {data.qrLinks.length ? (
-            data.qrLinks.map((link) => (
-              <QrCodeCard key={link.id} link={link} restaurantName={data.restaurant.name} logoUrl={data.logoUrl} />
+          <ActionMessage state={deleteState} />
+          {qrLinks.length ? (
+            qrLinks.map((link) => (
+              <QrCodeCard
+                key={link.id}
+                link={link}
+                restaurantName={data.restaurant.name}
+                logoUrl={data.logoUrl}
+                canManage={data.canManage}
+                onDelete={handleDelete}
+                isDeleting={deletingId === link.id}
+              />
             ))
           ) : (
             <div className="rounded-sm bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">

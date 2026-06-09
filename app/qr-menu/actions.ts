@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 export type QrActionState = {
   status: "idle" | "success" | "error";
   message: string;
+  deletedId?: string;
 };
 
 const initialOrigin = "http://localhost:3000";
@@ -52,7 +53,7 @@ async function requireOwner(restaurantId: string) {
   }
 
   if (data.role !== "owner") {
-    return { supabase, error: "Only restaurant owners can create QR links." };
+    return { supabase, error: "Only restaurant owners can manage QR links." };
   }
 
   return { supabase, error: null };
@@ -139,4 +140,52 @@ export async function createQrLinkAction(
   revalidatePath("/qr-menu");
   revalidatePath("/dashboard");
   return { status: "success", message: "QR link created." };
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+export async function deleteQrLinkAction(
+  _state: QrActionState,
+  formData: FormData,
+): Promise<QrActionState> {
+  const restaurantId = text(formData, "restaurantId");
+  const qrLinkId = text(formData, "qrLinkId");
+
+  if (!isUuid(restaurantId) || !isUuid(qrLinkId)) {
+    return { status: "error", message: "Select a valid QR link." };
+  }
+
+  const { supabase, error } = await requireOwner(restaurantId);
+  if (error) return { status: "error", message: error };
+
+  const { data: qrLink, error: lookupError } = await supabase
+    .from("qr_links")
+    .select("id, restaurant_id")
+    .eq("id", qrLinkId)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (lookupError) {
+    return { status: "error", message: lookupError.message };
+  }
+
+  if (!qrLink) {
+    return { status: "error", message: "QR link was not found for this restaurant." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("qr_links")
+    .delete()
+    .eq("id", qrLinkId)
+    .eq("restaurant_id", restaurantId);
+
+  if (deleteError) {
+    return { status: "error", message: deleteError.message };
+  }
+
+  revalidatePath("/qr-menu");
+  revalidatePath("/dashboard");
+  return { status: "success", message: "QR link deleted.", deletedId: qrLinkId };
 }
