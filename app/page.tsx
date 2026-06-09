@@ -137,7 +137,7 @@ function SecondaryButton({
 function CtaButtons({ dark = false }: { dark?: boolean }) {
   return (
     <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-      <PrimaryButton href="/get-started" dark={dark}>
+      <PrimaryButton href="/signup" dark={dark}>
         Get Started
       </PrimaryButton>
       <SecondaryButton href="/contact" dark={dark}>
@@ -169,14 +169,14 @@ export default function Home() {
               Login
             </a>
             <a
-              href="/get-started"
+              href="/signup"
               className="inline-flex min-h-11 items-center justify-center rounded-sm bg-[#0F172A] px-5 text-sm font-semibold text-white transition hover:bg-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#0F172A] focus:ring-offset-2 focus:ring-offset-[#FBFAF7]"
             >
               Get Started
             </a>
           </div>
           <a
-            href="/get-started"
+            href="/signup"
             className="inline-flex min-h-10 items-center justify-center rounded-sm border border-slate-300 px-4 text-sm font-semibold text-[#0F172A] md:hidden"
           >
             Get Started
