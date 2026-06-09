@@ -73,16 +73,17 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
 
   debugQrPrint("qr-print-rpc", {
     qrLinkId,
-    found: Boolean(data),
+    found: Array.isArray(data) ? data.length > 0 : Boolean(data),
     error: error?.message ?? null,
-    restaurantId: data && typeof data === "object" && "restaurant_id" in data ? data.restaurant_id : null,
+    restaurantId: Array.isArray(data) && data[0] ? data[0].restaurant_id : null,
   });
 
-  if (error || !data) {
+  const qrLink = Array.isArray(data) ? (data[0] as QrPrintData | undefined) : null;
+
+  if (error || !qrLink) {
     notFound();
   }
 
-  const qrLink = data as QrPrintData;
   const [logoUrl, qrDataUrl] = await Promise.all([
     createSignedLogoUrl(supabase, qrLink.restaurant_logo_path),
     QRCode.toDataURL(qrLink.destination_url, {
