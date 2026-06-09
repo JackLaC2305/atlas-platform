@@ -22,3 +22,37 @@ body {
   background: #d4a017;
   color: #0f172a;
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 16mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  .qr-print-controls {
+    display: none !important;
+  }
+
+  .qr-print-page {
+    min-height: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  .qr-print-card-shell {
+    min-height: auto !important;
+    display: block !important;
+  }
+
+  .qr-print-card {
+    margin: 0 auto !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

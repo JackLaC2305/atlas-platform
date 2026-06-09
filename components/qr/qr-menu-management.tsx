@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
 
 import { createQrLinkAction, deleteQrLinkAction, type QrActionState } from "@/app/qr-menu/actions";
@@ -91,13 +92,14 @@ function QrCodeCard({
             >
               Download PNG
             </a>
-            <button
-              type="button"
-              onClick={() => window.print()}
+            <Link
+              href={`/qr-menu/print/${link.id}`}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex min-h-10 items-center justify-center rounded-sm border border-slate-300 px-4 text-sm font-semibold text-[#0F172A]"
             >
               Print Card
-            </button>
+            </Link>
             <button
               type="button"
               disabled={!canManage || isDeleting}
