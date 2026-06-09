@@ -41,6 +41,7 @@ export type Menu = {
   id: string;
   restaurant_id: string;
   name: string;
+  slug: string;
   description: string | null;
   status: MenuStatus;
   availability_type: AvailabilityType;

@@ -30,11 +30,13 @@ function buildSetupItems({
   brandingCompleted,
   openingHoursCompleted,
   menuSetupState,
+  qrSetupCompleted,
 }: {
   onboardingCompleted: boolean;
   brandingCompleted: boolean;
   openingHoursCompleted: boolean;
   menuSetupState: "not-started" | "in-progress" | "complete";
+  qrSetupCompleted: boolean;
 }): SetupItem[] {
   const menuSetupCompleted = menuSetupState === "complete";
   const menuSetupInProgress = menuSetupState === "in-progress";
@@ -68,7 +70,13 @@ function buildSetupItems({
       status: menuSetupCompleted ? "Complete" : menuSetupInProgress ? "In Progress" : "Not Started",
       href: "/menus",
     },
-    { label: "QR Menu", completed: false, progressValue: 0, status: menuSetupCompleted ? "Ready to Configure" : "Not Started", href: "/qr-menu" },
+    {
+      label: "QR Menu",
+      completed: qrSetupCompleted,
+      progressValue: qrSetupCompleted ? 1 : 0,
+      status: qrSetupCompleted ? "Complete" : menuSetupCompleted ? "Ready to Configure" : "Not Started",
+      href: "/qr-menu",
+    },
     { label: "Inventory", completed: false, progressValue: 0, status: "Not Started", href: "/inventory" },
     { label: "Analytics", completed: false, progressValue: 0, status: "Not Started", href: "/analytics" },
     { label: "Billing", completed: false, progressValue: 0, status: "Not Started", href: "/billing" },
@@ -114,18 +122,30 @@ export default async function DashboardPage() {
   );
   const menuSetupState =
     menuSetupCompleted ? "complete" : menuCount > 0 ? "in-progress" : "not-started";
+  const { count: qrLinkCount } = await supabase
+    .from("qr_links")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id);
+  const qrSetupCompleted = Boolean(qrLinkCount && qrLinkCount > 0);
   const setupItems = buildSetupItems({
     onboardingCompleted: restaurant.onboarding_completed,
     brandingCompleted,
     openingHoursCompleted,
     menuSetupState,
+    qrSetupCompleted,
   });
   const completedCount = setupItems.filter((item) => item.completed).length;
   const inProgressCount = setupItems.filter((item) => item.status === "In Progress").length;
   const progressUnits = setupItems.reduce((sum, item) => sum + item.progressValue, 0);
   const progressPercent = Math.round((progressUnits / setupItems.length) * 100);
   const nextStep =
-    menuSetupState === "complete"
+    qrSetupCompleted
+      ? {
+          title: "Inventory",
+          status: "Not Started" as const,
+          detail: "QR Menu is configured. Inventory is the next module, but it has not been built yet.",
+        }
+      : menuSetupState === "complete"
       ? {
           title: "QR Menu",
           status: "Ready to Configure" as const,
