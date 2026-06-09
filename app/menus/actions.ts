@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import {
   allergenTags,
@@ -51,6 +52,8 @@ function safeFileName(fileName: string) {
   );
 }
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
 async function requireOwner(restaurantId: string) {
   const supabase = await createClient();
   const {
@@ -77,6 +80,80 @@ async function requireOwner(restaurantId: string) {
   }
 
   return { supabase, error: null };
+}
+
+async function menuBelongsToRestaurant(
+  supabase: SupabaseServerClient,
+  restaurantId: string,
+  menuId: string,
+) {
+  if (!menuId) return false;
+
+  const { data } = await supabase
+    .from("menus")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .eq("id", menuId)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+async function categoryBelongsToMenu(
+  supabase: SupabaseServerClient,
+  restaurantId: string,
+  menuId: string,
+  categoryId: string,
+) {
+  if (!categoryId || !menuId) return false;
+
+  const { data } = await supabase
+    .from("menu_categories")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .eq("menu_id", menuId)
+    .eq("id", categoryId)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+async function validateMenuPublishReadiness(
+  supabase: SupabaseServerClient,
+  restaurantId: string,
+  menuId: string,
+) {
+  const menuExists = await menuBelongsToRestaurant(supabase, restaurantId, menuId);
+
+  if (!menuExists) {
+    return "Menu not found.";
+  }
+
+  const [{ data: categories }, { data: items }] = await Promise.all([
+    supabase
+      .from("menu_categories")
+      .select("id")
+      .eq("restaurant_id", restaurantId)
+      .eq("menu_id", menuId)
+      .eq("is_visible", true)
+      .limit(1),
+    supabase
+      .from("menu_items")
+      .select("id")
+      .eq("restaurant_id", restaurantId)
+      .eq("menu_id", menuId)
+      .limit(1),
+  ]);
+
+  if (!categories?.length || !items?.length) {
+    return "Publishing is blocked until this menu has at least one visible category and one item.";
+  }
+
+  return null;
+}
+
+function blockedPublishRedirect(message: string) {
+  return `/menus?menuError=${encodeURIComponent(message)}`;
 }
 
 function validateSchedule(formData: FormData) {
@@ -110,12 +187,24 @@ export async function createMenuAction(
   if (!name) return { status: "error", message: "Menu name is required." };
   const schedule = validateSchedule(formData);
   if (schedule.error) return { status: "error", message: schedule.error };
+  const status = text(formData, "status") || "draft";
+
+  if (!menuStatuses.includes(status as never)) {
+    return { status: "error", message: "Select a valid menu status." };
+  }
+
+  if (status === "published") {
+    return {
+      status: "error",
+      message: "Create the menu first, then add at least one visible category and one item before publishing.",
+    };
+  }
 
   const { error: insertError } = await supabase.from("menus").insert({
     restaurant_id: restaurantId,
     name,
     description: optionalText(formData, "description"),
-    status: text(formData, "status") || "draft",
+    status,
     availability_type: schedule.availabilityType,
     schedule_days: schedule.scheduleDays,
     start_time: schedule.availabilityType === "scheduled" ? schedule.startTime : null,
@@ -144,6 +233,13 @@ export async function updateMenuAction(
   if (schedule.error) return { status: "error", message: schedule.error };
 
   const status = text(formData, "status") || "draft";
+  if (!menuStatuses.includes(status as never)) {
+    return { status: "error", message: "Select a valid menu status." };
+  }
+  if (status === "published") {
+    const publishError = await validateMenuPublishReadiness(supabase, restaurantId, menuId);
+    if (publishError) return { status: "error", message: publishError };
+  }
   const { error: updateError } = await supabase
     .from("menus")
     .update({
@@ -174,17 +270,10 @@ export async function publishMenuAction(formData: FormData): Promise<void> {
   const { supabase, error } = await requireOwner(restaurantId);
   if (error) return;
 
-  const [{ data: categories }, { data: items }] = await Promise.all([
-    supabase
-      .from("menu_categories")
-      .select("id")
-      .eq("restaurant_id", restaurantId)
-      .eq("menu_id", menuId)
-      .eq("is_visible", true),
-    supabase.from("menu_items").select("id").eq("restaurant_id", restaurantId).eq("menu_id", menuId),
-  ]);
-
-  if (!categories?.length || !items?.length) return;
+  const publishError = await validateMenuPublishReadiness(supabase, restaurantId, menuId);
+  if (publishError) {
+    redirect(blockedPublishRedirect(publishError));
+  }
 
   await supabase
     .from("menus")
@@ -201,6 +290,13 @@ export async function menuStatusAction(formData: FormData): Promise<void> {
   const status = text(formData, "status");
   const { supabase, error } = await requireOwner(restaurantId);
   if (error || !menuStatuses.includes(status as never)) return;
+
+  if (status === "published") {
+    const publishError = await validateMenuPublishReadiness(supabase, restaurantId, menuId);
+    if (publishError) {
+      redirect(blockedPublishRedirect(publishError));
+    }
+  }
 
   await supabase
     .from("menus")
@@ -224,10 +320,15 @@ export async function createCategoryAction(
   if (error) return { status: "error", message: error };
   const name = text(formData, "name");
   if (!name) return { status: "error", message: "Category name is required." };
+  const menuId = text(formData, "menuId");
+
+  if (!(await menuBelongsToRestaurant(supabase, restaurantId, menuId))) {
+    return { status: "error", message: "Select a valid menu for this restaurant." };
+  }
 
   const { error: insertError } = await supabase.from("menu_categories").insert({
     restaurant_id: restaurantId,
-    menu_id: text(formData, "menuId"),
+    menu_id: menuId,
     name,
     description: optionalText(formData, "description"),
     sort_order: parseNumber(text(formData, "sortOrder")),
@@ -393,6 +494,24 @@ export async function saveMenuItemAction(
   if (!name) return { status: "error", message: "Item name is required." };
   if (!categoryId) return { status: "error", message: "Select a category." };
   if (basePrice < 0) return { status: "error", message: "Base price must be zero or higher." };
+  if (!(await menuBelongsToRestaurant(supabase, restaurantId, menuId))) {
+    return { status: "error", message: "Select a valid menu for this restaurant." };
+  }
+  if (!(await categoryBelongsToMenu(supabase, restaurantId, menuId, categoryId))) {
+    return { status: "error", message: "Select a valid category for this menu." };
+  }
+  if (itemId) {
+    const { data: existingItem } = await supabase
+      .from("menu_items")
+      .select("id")
+      .eq("restaurant_id", restaurantId)
+      .eq("id", itemId)
+      .maybeSingle();
+
+    if (!existingItem) {
+      return { status: "error", message: "Menu item not found." };
+    }
+  }
 
   const itemPayload = {
     restaurant_id: restaurantId,

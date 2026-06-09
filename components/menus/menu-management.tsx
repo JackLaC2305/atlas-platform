@@ -760,7 +760,13 @@ function Preview({
   );
 }
 
-export function MenuManagement({ data }: { data: MenuManagementData }) {
+export function MenuManagement({
+  data,
+  notice,
+}: {
+  data: MenuManagementData;
+  notice?: { status: "success" | "error"; message: string };
+}) {
   const [selectedMenuId, setSelectedMenuId] = useState(data.menus[0]?.id ?? "");
   const [view, setView] = useState<"overview" | "builder" | "preview">("overview");
   const [editingItem, setEditingItem] = useState<MenuItemFull | undefined>();
@@ -777,6 +783,7 @@ export function MenuManagement({ data }: { data: MenuManagementData }) {
 
   return (
     <div className="space-y-6">
+      {notice ? <ActionMessage state={{ status: notice.status, message: notice.message }} /> : null}
       <section className="rounded-sm bg-[#0F172A] p-7 text-white shadow-sm sm:p-9">
         <p className="text-sm font-medium text-[#D4A017]">Menu Management</p>
         <h1 className="mt-3 text-4xl font-semibold">Build and manage restaurant menus.</h1>
