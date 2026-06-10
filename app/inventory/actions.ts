@@ -102,6 +102,8 @@ export async function saveIngredientAction(
     cost_per_unit: optionalNumber(formData, "costPerUnit"),
     supplier_name: text(formData, "supplierName") || null,
     notes: text(formData, "notes") || null,
+    stock_tracking_mode: text(formData, "stockTrackingMode") === "approximate" ? "approximate" : "exact",
+    package_description: text(formData, "packageDescription") || null,
   };
 
   const result = ingredientId
@@ -184,6 +186,9 @@ export async function importMenuIngredientsAction(
           current_stock: startingStock,
           low_stock_threshold: threshold,
           cost_per_unit: optionalNumber(formData, `costPerUnit-${menuIngredientId}`),
+          stock_tracking_mode:
+            text(formData, `stockTrackingMode-${menuIngredientId}`) === "approximate" ? "approximate" : "exact",
+          package_description: text(formData, `packageDescription-${menuIngredientId}`) || null,
         })
         .select("id")
         .single();
@@ -227,6 +232,16 @@ export async function adjustStockAction(
   if (!isUuid(ingredientId)) return { status: "error", message: "Select an ingredient." };
   if (!["add", "remove", "set", "correction", "waste"].includes(movementType)) {
     return { status: "error", message: "Select a valid adjustment type." };
+  }
+  const allowedReasons: Record<string, string[]> = {
+    add: ["Supplier delivery", "Stock count addition", "Opening stock"],
+    remove: ["Used in service", "Transfer out", "Manual removal"],
+    set: ["Stock count", "Manual correction", "Initial setup"],
+    waste: ["Spoilage", "Damage", "Expired", "Prep waste"],
+    correction: ["Manual correction", "Stock count", "Data correction"],
+  };
+  if (!allowedReasons[movementType]?.includes(reason)) {
+    return { status: "error", message: "Select a reason that matches the adjustment type." };
   }
 
   const { error: rpcError } = await supabase.rpc("apply_inventory_stock_adjustment", {

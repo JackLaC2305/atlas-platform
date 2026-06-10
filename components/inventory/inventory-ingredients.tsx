@@ -8,7 +8,7 @@ import {
   saveAlertPreferencesAction,
   saveIngredientAction,
 } from "@/app/inventory/actions";
-import { formatQuantity } from "@/lib/inventory/format";
+import { currencySymbol, formatQuantity } from "@/lib/inventory/format";
 import {
   inventoryCategories,
   inventoryUnits,
@@ -19,7 +19,40 @@ import {
 
 import { ActionMessage, initialInventoryState, IngredientSummary, InventoryHeader, InventoryStatusBadge } from "./inventory-shared";
 
-function IngredientFields({ ingredient }: { ingredient?: InventoryIngredient }) {
+function UnitFields({
+  namePrefix = "",
+  defaultUnit,
+}: {
+  namePrefix?: string;
+  defaultUnit?: string | null;
+}) {
+  const isKnownUnit = defaultUnit ? inventoryUnits.includes(defaultUnit as never) : true;
+  const [unit, setUnit] = useState(isKnownUnit ? defaultUnit ?? "unit" : "other");
+
+  return (
+    <>
+      <label className="text-sm font-semibold text-slate-700">
+        Unit *
+        <select
+          name={`${namePrefix}unit`}
+          value={unit}
+          onChange={(event) => setUnit(event.target.value)}
+          className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm"
+        >
+          {inventoryUnits.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
+      {unit === "other" ? (
+        <label className="text-sm font-semibold text-slate-700">
+          Custom Unit *
+          <input name={`${namePrefix}customUnit`} defaultValue={isKnownUnit ? "" : defaultUnit ?? ""} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
+        </label>
+      ) : null}
+    </>
+  );
+}
+
+function IngredientFields({ ingredient, currency }: { ingredient?: InventoryIngredient; currency: string }) {
   const isKnownUnit = ingredient ? inventoryUnits.includes(ingredient.unit as never) : true;
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -33,27 +66,35 @@ function IngredientFields({ ingredient }: { ingredient?: InventoryIngredient }) 
           {inventoryCategories.map((category) => <option key={category}>{category}</option>)}
         </select>
       </label>
+      <UnitFields defaultUnit={ingredient?.unit} />
+      {!isKnownUnit ? null : <div className="hidden sm:block" />}
       <label className="text-sm font-semibold text-slate-700">
-        Unit *
-        <select name="unit" defaultValue={isKnownUnit ? ingredient?.unit ?? "unit" : "other"} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
-          {inventoryUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+        Stock Count Type
+        <select name="stockTrackingMode" defaultValue={ingredient?.stock_tracking_mode ?? "exact"} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
+          <option value="exact">Exact Quantity</option>
+          <option value="approximate">Approximate Quantity</option>
         </select>
+        <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+          Use approximate when stock is counted as a box, case, bag, or partial package.
+        </span>
       </label>
       <label className="text-sm font-semibold text-slate-700">
-        Custom Unit
-        <input name="customUnit" defaultValue={isKnownUnit ? "" : ingredient?.unit} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
+        Package Description
+        <input name="packageDescription" defaultValue={ingredient?.package_description ?? ""} placeholder="1 box, half box, case, bag" className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
       </label>
       <label className="text-sm font-semibold text-slate-700">
         Current Stock *
         <input name="currentStock" type="number" step="0.001" min="0" defaultValue={ingredient?.current_stock ?? 0} required className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
+        <span className="mt-1 block text-xs font-normal text-slate-500">Numeric working estimate used for calculations.</span>
       </label>
       <label className="text-sm font-semibold text-slate-700">
         Low-Stock Threshold *
         <input name="lowStockThreshold" type="number" step="0.001" min="0" defaultValue={ingredient?.low_stock_threshold ?? 0} required className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
       </label>
       <label className="text-sm font-semibold text-slate-700">
-        Cost Per Unit
+        {currency} Cost Per Unit
         <input name="costPerUnit" type="number" step="0.0001" min="0" defaultValue={ingredient?.cost_per_unit ?? ""} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
+        <span className="mt-1 block text-xs font-normal text-slate-500">Optional, but useful for estimated inventory value.</span>
       </label>
       <label className="text-sm font-semibold text-slate-700">
         Supplier
@@ -67,14 +108,14 @@ function IngredientFields({ ingredient }: { ingredient?: InventoryIngredient }) 
   );
 }
 
-function IngredientEditor({ restaurantId, ingredient }: { restaurantId: string; ingredient?: InventoryIngredient }) {
+function IngredientEditor({ restaurantId, currency, ingredient }: { restaurantId: string; currency: string; ingredient?: InventoryIngredient }) {
   const [state, formAction, pending] = useActionState(saveIngredientAction, initialInventoryState);
   return (
     <form action={formAction} className="space-y-4 rounded-sm bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <input type="hidden" name="restaurantId" value={restaurantId} />
       {ingredient ? <input type="hidden" name="ingredientId" value={ingredient.id} /> : null}
       <h2 className="text-xl font-semibold">{ingredient ? "Edit Ingredient" : "Add Ingredient"}</h2>
-      <IngredientFields ingredient={ingredient} />
+      <IngredientFields ingredient={ingredient} currency={currency} />
       <ActionMessage state={state} />
       <button disabled={pending} className="inline-flex min-h-11 items-center justify-center rounded-sm bg-[#0F172A] px-5 text-sm font-semibold text-white disabled:opacity-60">
         {pending ? "Saving..." : ingredient ? "Save Ingredient" : "Add Ingredient"}
@@ -105,7 +146,8 @@ function DeleteIngredientButton({ restaurantId, ingredientId }: { restaurantId: 
   );
 }
 
-function ImportRow({ item }: { item: MenuIngredientOpportunity }) {
+function ImportRow({ item, currency }: { item: MenuIngredientOpportunity; currency: string }) {
+  const [unit, setUnit] = useState(item.unit && inventoryUnits.includes(item.unit as never) ? item.unit : "unit");
   return (
     <div className="rounded-sm bg-[#FBFAF7] p-4 ring-1 ring-slate-200">
       <label className="flex items-start gap-3">
@@ -123,13 +165,18 @@ function ImportRow({ item }: { item: MenuIngredientOpportunity }) {
         <select name={`category-${item.menuItemIngredientId}`} defaultValue="Other" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" aria-label="Category">
           {inventoryCategories.map((category) => <option key={category}>{category}</option>)}
         </select>
-        <select name={`unit-${item.menuItemIngredientId}`} defaultValue={item.unit ?? "unit"} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" aria-label="Unit">
+        <select name={`unit-${item.menuItemIngredientId}`} value={unit} onChange={(event) => setUnit(event.target.value)} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" aria-label="Unit">
           {inventoryUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
         </select>
-        <input name={`customUnit-${item.menuItemIngredientId}`} placeholder="Custom unit" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
+        {unit === "other" ? <input name={`customUnit-${item.menuItemIngredientId}`} placeholder="Custom unit" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" /> : null}
+        <select name={`stockTrackingMode-${item.menuItemIngredientId}`} defaultValue="exact" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" aria-label="Stock count type">
+          <option value="exact">Exact Quantity</option>
+          <option value="approximate">Approximate Quantity</option>
+        </select>
+        <input name={`packageDescription-${item.menuItemIngredientId}`} placeholder="Package, e.g. 1 box" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
         <input name={`currentStock-${item.menuItemIngredientId}`} type="number" step="0.001" min="0" placeholder="Starting stock" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
         <input name={`lowStockThreshold-${item.menuItemIngredientId}`} type="number" step="0.001" min="0" placeholder="Low-stock threshold" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
-        <input name={`costPerUnit-${item.menuItemIngredientId}`} type="number" step="0.0001" min="0" placeholder="Cost per unit" className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
+        <input name={`costPerUnit-${item.menuItemIngredientId}`} type="number" step="0.0001" min="0" placeholder={`${currency} cost per unit`} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" />
         <input name={`quantityPerItem-${item.menuItemIngredientId}`} type="number" step="0.001" min="0" defaultValue={item.quantity ?? 0} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" aria-label="Quantity per menu item" />
       </div>
     </div>
@@ -138,17 +185,23 @@ function ImportRow({ item }: { item: MenuIngredientOpportunity }) {
 
 function ImportFromMenu({ data }: { data: InventoryData }) {
   const [state, formAction, pending] = useActionState(importMenuIngredientsAction, initialInventoryState);
-  const importable = data.menuIngredientOpportunities;
+  const importable = data.menuIngredientOpportunities.filter((item) => !item.alreadyLinked);
+  const alreadyLinkedCount = data.menuIngredientOpportunities.length - importable.length;
+  const currency = currencySymbol(data.restaurant.currency);
 
   return (
     <section id="import-from-menu" className="rounded-sm bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <h2 className="text-2xl font-semibold">Import From Menu</h2>
       <p className="mt-3 text-sm leading-6 text-slate-600">
-        Atlas found {importable.length} ingredients from your menus. Review before importing. Linking ingredients enables automatic stock deduction from sales entries.
+        Atlas found {importable.length} menu ingredients ready for review. {alreadyLinkedCount ? `${alreadyLinkedCount} already imported ingredients are hidden from this list.` : ""}
+        {" "}Linking ingredients enables automatic stock deduction from sales entries.
       </p>
       <form action={formAction} className="mt-5 space-y-4">
         <input type="hidden" name="restaurantId" value={data.restaurant.id} />
-        {importable.slice(0, 20).map((item) => <ImportRow key={item.menuItemIngredientId} item={item} />)}
+        <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+          Unit conversions are supported for compatible weight and volume units, such as 200g menu usage deducting 0.2kg from kilogram stock. Incompatible units require manual correction.
+        </p>
+        {importable.slice(0, 20).map((item) => <ImportRow key={item.menuItemIngredientId} item={item} currency={currency} />)}
         {!importable.length ? <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm text-slate-600 ring-1 ring-slate-200">No menu ingredients found yet.</p> : null}
         <ActionMessage state={state} />
         <button disabled={pending || !data.canManage || importable.length === 0} className="inline-flex min-h-11 items-center justify-center rounded-sm bg-[#0F172A] px-5 text-sm font-semibold text-white disabled:opacity-60">
@@ -161,6 +214,8 @@ function ImportFromMenu({ data }: { data: InventoryData }) {
 
 export function InventoryIngredients({ data }: { data: InventoryData }) {
   const [query, setQuery] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const currency = currencySymbol(data.restaurant.currency);
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("All");
   const filtered = useMemo(
@@ -182,10 +237,15 @@ export function InventoryIngredients({ data }: { data: InventoryData }) {
         description="Keep stock levels current, set low-stock alerts, and connect inventory ingredients to menu item ingredients."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <IngredientEditor restaurantId={data.restaurant.id} />
-        <ImportFromMenu data={data} />
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" onClick={() => setShowAdd((value) => !value)} className="inline-flex min-h-10 items-center justify-center rounded-sm border border-slate-300 bg-white px-4 text-sm font-semibold text-[#0F172A]">
+          {showAdd ? "Close Add Ingredient" : "Add Ingredient"}
+        </button>
       </div>
+
+      <ImportFromMenu data={data} />
+
+      {showAdd ? <IngredientEditor restaurantId={data.restaurant.id} currency={currency} /> : null}
 
       <section className="rounded-sm bg-white p-6 shadow-sm ring-1 ring-slate-200">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -211,10 +271,14 @@ export function InventoryIngredients({ data }: { data: InventoryData }) {
                 </div>
               </summary>
               <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_220px]">
-                <IngredientEditor restaurantId={data.restaurant.id} ingredient={ingredient} />
+                <IngredientEditor restaurantId={data.restaurant.id} currency={currency} ingredient={ingredient} />
                 <div className="space-y-3 rounded-sm bg-white p-4 ring-1 ring-slate-200">
                   <p className="text-sm font-semibold">Inventory Details</p>
-                  <p className="text-xs text-slate-500">{ingredient.category} · {formatQuantity(ingredient.current_stock, ingredient.unit)}</p>
+                  <p className="text-xs text-slate-500">
+                    {ingredient.category} · {ingredient.stock_tracking_mode === "approximate" ? "Approx. " : ""}
+                    {formatQuantity(ingredient.current_stock, ingredient.unit)}
+                    {ingredient.package_description ? ` — ${ingredient.package_description}` : ""}
+                  </p>
                   <p className="text-xs text-slate-500">POS Sync: Coming Soon</p>
                   <DeleteIngredientButton restaurantId={data.restaurant.id} ingredientId={ingredient.id} />
                 </div>

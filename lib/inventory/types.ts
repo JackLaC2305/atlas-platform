@@ -58,6 +58,8 @@ export type InventoryIngredient = {
   cost_per_unit: number | null;
   supplier_name: string | null;
   notes: string | null;
+  stock_tracking_mode: "exact" | "approximate";
+  package_description: string | null;
   status: InventoryStatus;
   external_pos_item_id: string | null;
   external_pos_location_id: string | null;
@@ -75,6 +77,7 @@ export type InventoryMenuLink = {
   menu_item_ingredient_id: string | null;
   quantity_per_item: number;
   unit: string;
+  inventoryIngredient?: InventoryIngredient;
   created_at: string;
   updated_at: string;
 };

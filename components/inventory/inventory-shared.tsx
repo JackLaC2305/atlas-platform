@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
 import type { InventoryActionState } from "@/app/inventory/actions";
 import { formatInventoryStatus, formatQuantity } from "@/lib/inventory/format";
 import type { InventoryIngredient } from "@/lib/inventory/types";
@@ -53,6 +56,35 @@ export function InventoryHeader({
   );
 }
 
+export function InventoryNav() {
+  const pathname = usePathname();
+  const items = [
+    { href: "/inventory", label: pathname === "/inventory" ? "Overview" : "Back to Inventory" },
+    { href: "/inventory/ingredients", label: "Ingredients" },
+    { href: "/inventory/adjustments", label: "Adjustments" },
+    { href: "/inventory/sales", label: "Sales" },
+  ];
+
+  return (
+    <nav className="flex flex-wrap gap-2 rounded-sm bg-white p-2 shadow-sm ring-1 ring-slate-200" aria-label="Inventory navigation">
+      {items.map((item) => {
+        const active = pathname === item.href;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`inline-flex min-h-10 items-center justify-center rounded-sm px-4 text-sm font-semibold ${
+              active ? "bg-[#0F172A] text-white" : "text-slate-600 hover:bg-[#FBFAF7] hover:text-[#0F172A]"
+            }`}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function IngredientSummary({ ingredient }: { ingredient: InventoryIngredient }) {
   return (
     <div>
@@ -61,7 +93,9 @@ export function IngredientSummary({ ingredient }: { ingredient: InventoryIngredi
         <InventoryStatusBadge status={ingredient.status} />
       </div>
       <p className="mt-1 text-sm text-slate-500">
-        {formatQuantity(ingredient.current_stock, ingredient.unit)} in stock · threshold{" "}
+        {ingredient.stock_tracking_mode === "approximate" ? "Approx. " : ""}
+        {formatQuantity(ingredient.current_stock, ingredient.unit)} in stock
+        {ingredient.package_description ? ` — ${ingredient.package_description}` : ""} · threshold{" "}
         {formatQuantity(ingredient.low_stock_threshold, ingredient.unit)}
       </p>
     </div>

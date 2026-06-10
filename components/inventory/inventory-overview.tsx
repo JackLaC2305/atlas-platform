@@ -50,9 +50,14 @@ export function InventoryOverview({ data }: { data: InventoryData }) {
                 Review detected ingredients, set starting stock, and link them for automatic stock deductions.
               </p>
             </div>
-            <Link href="/inventory/ingredients#import-from-menu" className="inline-flex min-h-10 items-center justify-center rounded-sm bg-[#0F172A] px-4 text-sm font-semibold text-white">
-              Review Import
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/inventory/ingredients#import-from-menu" className="inline-flex min-h-11 items-center justify-center rounded-sm bg-[#0F172A] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800">
+                Review Import
+              </Link>
+              <Link href="/inventory/sales" className="inline-flex min-h-11 items-center justify-center rounded-sm border border-slate-300 bg-white px-5 text-sm font-semibold text-[#0F172A]">
+                Enter Daily Sales
+              </Link>
+            </div>
           </div>
         </section>
 

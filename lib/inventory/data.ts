@@ -108,7 +108,12 @@ export async function getInventoryData(context: AppRestaurantContext): Promise<I
   ]);
 
   const ingredients = (ingredientsResult.data ?? []) as InventoryIngredient[];
-  const links = (linksResult.data ?? []) as InventoryMenuLink[];
+  const rawLinks = (linksResult.data ?? []) as InventoryMenuLink[];
+  const ingredientsById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
+  const links = rawLinks.map((link) => ({
+    ...link,
+    inventoryIngredient: ingredientsById.get(link.inventory_ingredient_id),
+  }));
   const menus = (menusResult.data ?? []) as RawMenu[];
   const rawMenuItems = (menuItemsResult.data ?? []) as RawMenuItem[];
   const menuById = new Map(menus.map((menu) => [menu.id, menu]));

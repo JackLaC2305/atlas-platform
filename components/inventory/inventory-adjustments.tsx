@@ -4,14 +4,48 @@ import { useActionState, useMemo, useState } from "react";
 
 import { adjustStockAction } from "@/app/inventory/actions";
 import { formatQuantity } from "@/lib/inventory/format";
-import { adjustmentReasons, type InventoryData } from "@/lib/inventory/types";
+import type { InventoryData } from "@/lib/inventory/types";
 
 import { ActionMessage, initialInventoryState, IngredientSummary, InventoryHeader } from "./inventory-shared";
+
+const adjustmentOptions = {
+  add: {
+    label: "Delivery Intake",
+    reasons: ["Supplier delivery", "Stock count addition", "Opening stock"],
+  },
+  remove: {
+    label: "Remove Stock",
+    reasons: ["Used in service", "Transfer out", "Manual removal"],
+  },
+  set: {
+    label: "Set Stock Level",
+    reasons: ["Stock count", "Manual correction", "Initial setup"],
+  },
+  waste: {
+    label: "Waste",
+    reasons: ["Spoilage", "Damage", "Expired", "Prep waste"],
+  },
+  correction: {
+    label: "Manual Correction",
+    reasons: ["Manual correction", "Stock count", "Data correction"],
+  },
+};
+
+function formatMovementTime(value: string) {
+  return new Intl.DateTimeFormat("en-IE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 
 export function InventoryAdjustments({ data }: { data: InventoryData }) {
   const [state, formAction, pending] = useActionState(adjustStockAction, initialInventoryState);
   const [ingredientFilter, setIngredientFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [movementType, setMovementType] = useState<keyof typeof adjustmentOptions>("add");
   const filteredMovements = useMemo(
     () =>
       data.movements.filter((movement) => {
@@ -45,13 +79,12 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
           </label>
           <label className="block text-sm font-semibold text-slate-700">
             Adjustment Type *
-            <select name="movementType" defaultValue="add" className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
-              <option value="add">Add Stock</option>
-              <option value="remove">Remove Stock</option>
-              <option value="set">Set Stock Level</option>
-              <option value="correction">Correction</option>
-              <option value="waste">Waste</option>
+            <select name="movementType" value={movementType} onChange={(event) => setMovementType(event.target.value as keyof typeof adjustmentOptions)} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
+              {Object.entries(adjustmentOptions).map(([value, option]) => (
+                <option key={value} value={value}>{option.label}</option>
+              ))}
             </select>
+            <span className="mt-1 block text-xs font-normal text-slate-500">Sales deductions are system-generated from daily sales entries.</span>
           </label>
           <label className="block text-sm font-semibold text-slate-700">
             Quantity *
@@ -59,8 +92,8 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
           </label>
           <label className="block text-sm font-semibold text-slate-700">
             Reason *
-            <select name="reason" defaultValue="Delivery" className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
-              {adjustmentReasons.map((reason) => <option key={reason}>{reason}</option>)}
+            <select name="reason" className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
+              {adjustmentOptions[movementType].reasons.map((reason) => <option key={reason}>{reason}</option>)}
             </select>
           </label>
           <label className="block text-sm font-semibold text-slate-700">
@@ -82,8 +115,8 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
             </select>
             <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-sm border border-slate-200 px-4 py-3 text-sm">
               <option>All</option>
-              <option value="add">Add</option>
-              <option value="remove">Remove</option>
+              <option value="add">Delivery Intake</option>
+              <option value="remove">Remove Stock</option>
               <option value="set">Set</option>
               <option value="sales_deduction">Sales Deduction</option>
               <option value="correction">Correction</option>
@@ -100,7 +133,7 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
                     {movement.reason} · {movement.movement_type.replaceAll("_", " ")} · {formatQuantity(movement.quantity_change, ingredient?.unit)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {formatQuantity(movement.old_stock, ingredient?.unit)} to {formatQuantity(movement.new_stock, ingredient?.unit)}
+                    {formatMovementTime(movement.created_at)} · {formatQuantity(movement.old_stock, ingredient?.unit)} to {formatQuantity(movement.new_stock, ingredient?.unit)}
                   </p>
                 </div>
               );

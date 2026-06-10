@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 
 import { enterSalesAction } from "@/app/inventory/actions";
-import { formatQuantity } from "@/lib/inventory/format";
+import { convertInventoryQuantity, formatQuantity } from "@/lib/inventory/format";
 import type { InventoryData, InventoryMenuLink } from "@/lib/inventory/types";
 
 import { ActionMessage, initialInventoryState, InventoryHeader } from "./inventory-shared";
@@ -23,18 +23,33 @@ export function InventorySales({ data }: { data: InventoryData }) {
     return grouped;
   }, [data.links]);
   const preview = useMemo(() => {
-    const totals = new Map<string, number>();
+    const totals = new Map<string, { quantity: number; warnings: string[] }>();
+    const warnings: string[] = [];
     Object.entries(quantities).forEach(([menuItemId, quantity]) => {
       if (quantity <= 0) return;
-      (linkByMenuItem.get(menuItemId) ?? []).forEach((link) => {
-        totals.set(link.inventory_ingredient_id, (totals.get(link.inventory_ingredient_id) ?? 0) + Number(link.quantity_per_item) * quantity);
+      const links = linkByMenuItem.get(menuItemId) ?? [];
+      const menuItem = data.menuItems.find((item) => item.id === menuItemId);
+      if (!links.length) {
+        warnings.push(`${menuItem?.name ?? "Menu item"} has no linked ingredients.`);
+      }
+      links.forEach((link) => {
+        const ingredient = link.inventoryIngredient;
+        if (!ingredient) return;
+        const converted = convertInventoryQuantity(Number(link.quantity_per_item) * quantity, link.unit, ingredient.unit);
+        if (converted === null) {
+          warnings.push(`${ingredient.name} uses ${link.unit} on the menu but is stocked in ${ingredient.unit}. Manual correction is required.`);
+          return;
+        }
+        const current = totals.get(link.inventory_ingredient_id) ?? { quantity: 0, warnings: [] };
+        totals.set(link.inventory_ingredient_id, { ...current, quantity: current.quantity + converted });
       });
     });
-    return Array.from(totals.entries()).map(([ingredientId, quantity]) => ({
+    const deductions = Array.from(totals.entries()).map(([ingredientId, item]) => ({
       ingredient: data.ingredients.find((item) => item.id === ingredientId),
-      quantity,
+      quantity: item.quantity,
     }));
-  }, [data.ingredients, linkByMenuItem, quantities]);
+    return { deductions, warnings };
+  }, [data.ingredients, data.menuItems, linkByMenuItem, quantities]);
 
   return (
     <div className="space-y-6">
@@ -74,7 +89,9 @@ export function InventorySales({ data }: { data: InventoryData }) {
                   <div>
                     <input type="hidden" name="menuItemId" value={item.id} />
                     <p className="text-sm font-semibold text-[#0F172A]">{item.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{item.menuName} · {linkedCount ? `${linkedCount} linked ingredient${linkedCount === 1 ? "" : "s"}` : "No linked ingredients yet"}</p>
+                    <p className={`mt-1 text-xs ${linkedCount ? "text-slate-500" : "font-semibold text-[#8A6811]"}`}>
+                      {item.menuName} · {linkedCount ? `${linkedCount} linked ingredient${linkedCount === 1 ? "" : "s"}` : "No linked ingredients yet"}
+                    </p>
                   </div>
                   <input
                     name={`quantity-${item.id}`}
@@ -104,13 +121,18 @@ export function InventorySales({ data }: { data: InventoryData }) {
               This preview uses linked ingredient quantities. It does not include unlinked menu ingredients.
             </p>
             <div className="mt-5 space-y-3">
-              {preview.map((item) => (
+              {preview.deductions.map((item) => (
                 <div key={item.ingredient?.id ?? item.quantity} className="rounded-sm bg-[#FBFAF7] p-4 ring-1 ring-slate-200">
                   <p className="text-sm font-semibold">{item.ingredient?.name ?? "Ingredient"}</p>
-                  <p className="mt-1 text-xs text-slate-500">Will deduct {formatQuantity(item.quantity, item.ingredient?.unit)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Will deduct {formatQuantity(item.quantity, item.ingredient?.unit)} from stock.</p>
                 </div>
               ))}
-              {!preview.length ? <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm text-slate-600 ring-1 ring-slate-200">Enter quantities to preview deductions.</p> : null}
+              {preview.warnings.map((warning) => (
+                <p key={warning} className="rounded-sm border border-[#D4A017]/30 bg-[#D4A017]/10 p-3 text-sm leading-6 text-[#76580D]">
+                  {warning}
+                </p>
+              ))}
+              {!preview.deductions.length && !preview.warnings.length ? <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm text-slate-600 ring-1 ring-slate-200">Enter quantities to preview deductions.</p> : null}
             </div>
           </section>
 

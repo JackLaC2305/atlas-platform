@@ -1,4 +1,5 @@
 import { AuthenticatedNav } from "@/components/app/authenticated-nav";
+import { InventoryNav } from "@/components/inventory/inventory-shared";
 import { InventorySales } from "@/components/inventory/inventory-sales";
 import { getInventoryData } from "@/lib/inventory/data";
 import { getAppRestaurantContext } from "@/lib/restaurants/context";
@@ -16,6 +17,8 @@ export default async function InventorySalesPage() {
         userEmail={context.user.email}
       />
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+        <InventoryNav />
+        <div className="mt-6" />
         <InventorySales data={data} />
       </section>
     </main>
