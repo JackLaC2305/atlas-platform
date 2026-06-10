@@ -31,15 +31,19 @@ function buildSetupItems({
   openingHoursCompleted,
   menuSetupState,
   qrSetupCompleted,
+  inventorySetupState,
 }: {
   onboardingCompleted: boolean;
   brandingCompleted: boolean;
   openingHoursCompleted: boolean;
   menuSetupState: "not-started" | "in-progress" | "complete";
   qrSetupCompleted: boolean;
+  inventorySetupState: "not-started" | "in-progress" | "complete";
 }): SetupItem[] {
   const menuSetupCompleted = menuSetupState === "complete";
   const menuSetupInProgress = menuSetupState === "in-progress";
+  const inventoryCompleted = inventorySetupState === "complete";
+  const inventoryInProgress = inventorySetupState === "in-progress";
 
   return [
     {
@@ -77,8 +81,14 @@ function buildSetupItems({
       status: qrSetupCompleted ? "Complete" : menuSetupCompleted ? "Ready to Configure" : "Not Started",
       href: "/qr-menu",
     },
-    { label: "Inventory", completed: false, progressValue: 0, status: "Not Started", href: "/inventory" },
-    { label: "Analytics", completed: false, progressValue: 0, status: "Not Started", href: "/analytics" },
+    {
+      label: "Inventory",
+      completed: inventoryCompleted,
+      progressValue: inventoryCompleted ? 1 : inventoryInProgress ? 0.5 : 0,
+      status: inventoryCompleted ? "Complete" : inventoryInProgress ? "In Progress" : qrSetupCompleted ? "Ready to Configure" : "Not Started",
+      href: "/inventory",
+    },
+    { label: "Analytics", completed: false, progressValue: 0, status: inventoryCompleted ? "Ready to Configure" : "Not Started", href: "/analytics" },
     { label: "Billing", completed: false, progressValue: 0, status: "Not Started", href: "/billing" },
   ];
 }
@@ -127,23 +137,53 @@ export default async function DashboardPage() {
     .select("id", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id);
   const qrSetupCompleted = Boolean(qrLinkCount && qrLinkCount > 0);
+  const [{ count: inventoryIngredientCount }, { count: inventoryMovementCount }, { count: inventorySalesCount }] = await Promise.all([
+    supabase
+      .from("inventory_ingredients")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant.id),
+    supabase
+      .from("inventory_stock_movements")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant.id),
+    supabase
+      .from("inventory_sales_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant.id),
+  ]);
+  const inventorySetupState =
+    inventoryIngredientCount && inventoryIngredientCount > 0
+      ? (inventoryMovementCount && inventoryMovementCount > 0) || (inventorySalesCount && inventorySalesCount > 0)
+        ? "complete"
+        : "in-progress"
+      : "not-started";
   const setupItems = buildSetupItems({
     onboardingCompleted: restaurant.onboarding_completed,
     brandingCompleted,
     openingHoursCompleted,
     menuSetupState,
     qrSetupCompleted,
+    inventorySetupState,
   });
   const completedCount = setupItems.filter((item) => item.completed).length;
   const inProgressCount = setupItems.filter((item) => item.status === "In Progress").length;
   const progressUnits = setupItems.reduce((sum, item) => sum + item.progressValue, 0);
   const progressPercent = Math.round((progressUnits / setupItems.length) * 100);
   const nextStep =
-    qrSetupCompleted
+    inventorySetupState === "complete"
+      ? {
+          title: "Analytics",
+          status: "Ready to Configure" as const,
+          detail: "Inventory is active. Analytics is the next module, but it has not been built yet.",
+        }
+      : qrSetupCompleted
       ? {
           title: "Inventory",
-          status: "Not Started" as const,
-          detail: "QR Menu is configured. Inventory is the next module, but it has not been built yet.",
+          status: inventorySetupState === "in-progress" ? "In Progress" as const : "Ready to Configure" as const,
+          detail:
+            inventorySetupState === "in-progress"
+              ? "Inventory ingredients exist. Add a stock adjustment or sales entry to complete Inventory setup."
+              : "Import menu ingredients, set stock levels, and start tracking low-stock alerts.",
         }
       : menuSetupState === "complete"
       ? {
@@ -186,7 +226,11 @@ export default async function DashboardPage() {
               <p className="mt-5 text-lg leading-8 text-slate-300">
                 Your restaurant workspace is ready.{" "}
                 {menuSetupState === "complete"
-                  ? "Continue with QR Menu when that module is enabled."
+                  ? qrSetupCompleted
+                    ? inventorySetupState === "complete"
+                      ? "Inventory is active. Analytics is the next planned module."
+                      : "Continue with Inventory to track stock and sales deductions."
+                    : "Continue with QR Menu when that module is enabled."
                   : menuSetupState === "in-progress"
                     ? "Continue refining Menu Management and publish a menu when ready."
                   : "Continue setup with Menu Management before opening customer-facing QR menus."}

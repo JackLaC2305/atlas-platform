@@ -1,9 +1,9 @@
 import { AuthenticatedNav } from "@/components/app/authenticated-nav";
-import { InventoryOverview } from "@/components/inventory/inventory-overview";
+import { InventoryIngredients } from "@/components/inventory/inventory-ingredients";
 import { getInventoryData } from "@/lib/inventory/data";
 import { getAppRestaurantContext } from "@/lib/restaurants/context";
 
-export default async function InventoryPage() {
+export default async function InventoryIngredientsPage() {
   const context = await getAppRestaurantContext();
   const data = await getInventoryData(context);
 
@@ -16,7 +16,7 @@ export default async function InventoryPage() {
         userEmail={context.user.email}
       />
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-        <InventoryOverview data={data} />
+        <InventoryIngredients data={data} />
       </section>
     </main>
   );
