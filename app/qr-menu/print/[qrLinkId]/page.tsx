@@ -24,9 +24,7 @@ function isUuid(value: string) {
 }
 
 function debugQrPrint(step: string, details: Record<string, unknown>) {
-  if (process.env.ATLAS_QR_PRINT_DEBUG === "1") {
-    console.log("[atlas:qr-print]", step, details);
-  }
+  console.log("[QR_PRINT_DEBUG]", step, details);
 }
 
 async function createSignedLogoUrl(
@@ -45,6 +43,7 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
 
   if (!isUuid(qrLinkId)) {
     debugQrPrint("invalid-param", { qrLinkId });
+    debugQrPrint("not-found", { reason: "invalid qrLinkId param", qrLinkId });
     notFound();
   }
 
@@ -55,6 +54,7 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
   debugQrPrint("auth", { hasUser: Boolean(user), userId: user?.id });
 
   if (!user) {
+    debugQrPrint("redirect-login", { reason: "no authenticated user", qrLinkId });
     redirect("/login");
   }
 
@@ -73,14 +73,23 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
 
   debugQrPrint("qr-print-rpc", {
     qrLinkId,
+    dataLength: Array.isArray(data) ? data.length : data ? 1 : 0,
     found: Array.isArray(data) ? data.length > 0 : Boolean(data),
-    error: error?.message ?? null,
+    errorCode: error?.code ?? null,
+    errorMessage: error?.message ?? null,
     restaurantId: Array.isArray(data) && data[0] ? data[0].restaurant_id : null,
   });
 
   const qrLink = Array.isArray(data) ? (data[0] as QrPrintData | undefined) : null;
 
   if (error || !qrLink) {
+    debugQrPrint("not-found", {
+      reason: error ? "rpc error" : "rpc returned no usable row",
+      qrLinkId,
+      dataLength: Array.isArray(data) ? data.length : data ? 1 : 0,
+      errorCode: error?.code ?? null,
+      errorMessage: error?.message ?? null,
+    });
     notFound();
   }
 
