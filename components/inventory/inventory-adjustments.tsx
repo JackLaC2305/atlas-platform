@@ -41,12 +41,21 @@ function formatMovementTime(value: string) {
   }).format(new Date(value));
 }
 
-export function InventoryAdjustments({ data }: { data: InventoryData }) {
+export function InventoryAdjustments({
+  data,
+  initialIngredientId,
+}: {
+  data: InventoryData;
+  initialIngredientId?: string;
+}) {
   const [state, formAction, pending] = useActionState(adjustStockAction, initialInventoryState);
-  const [ingredientFilter, setIngredientFilter] = useState("All");
+  const initialIngredient = data.ingredients.some((ingredient) => ingredient.id === initialIngredientId)
+    ? initialIngredientId ?? ""
+    : "";
+  const [ingredientFilter, setIngredientFilter] = useState(initialIngredient || "All");
   const [typeFilter, setTypeFilter] = useState("All");
   const [movementType, setMovementType] = useState<keyof typeof adjustmentOptions>("add");
-  const [selectedIngredientId, setSelectedIngredientId] = useState("");
+  const [selectedIngredientId, setSelectedIngredientId] = useState(initialIngredient);
   const selectedIngredient = data.ingredients.find((ingredient) => ingredient.id === selectedIngredientId);
   const filteredMovements = useMemo(
     () =>

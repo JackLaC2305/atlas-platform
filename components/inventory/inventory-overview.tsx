@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 import { currencySymbol, formatQuantity } from "@/lib/inventory/format";
-import type { InventoryData } from "@/lib/inventory/types";
+import type { InventoryData, InventoryIngredient } from "@/lib/inventory/types";
 
-import { IngredientSummary, InventoryHeader } from "./inventory-shared";
+import { InventoryHeader, InventoryStatusBadge } from "./inventory-shared";
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
@@ -12,6 +12,100 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
       <p className="mt-3 text-3xl font-semibold text-[#0F172A]">{value}</p>
       <p className="mt-2 text-sm leading-6 text-slate-500">{detail}</p>
     </div>
+  );
+}
+
+function StockAlertRow({
+  ingredient,
+  urgent = false,
+}: {
+  ingredient: InventoryIngredient;
+  urgent?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-sm p-4 ring-1 ${
+        urgent ? "bg-red-50/70 ring-red-100" : "bg-[#FBFAF7] ring-slate-200"
+      }`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-semibold text-[#0F172A]">{ingredient.name}</p>
+            <InventoryStatusBadge status={ingredient.status} />
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {ingredient.stock_tracking_mode === "approximate" ? "Approx. " : ""}
+            <span className="font-semibold text-[#0F172A]">
+              {formatQuantity(ingredient.current_stock, ingredient.unit)}
+            </span>{" "}
+            in stock
+            {ingredient.package_description ? ` — ${ingredient.package_description}` : ""}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Threshold {formatQuantity(ingredient.low_stock_threshold, ingredient.unit)} · {ingredient.category}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link
+            href={`/inventory/adjustments?ingredient=${ingredient.id}`}
+            className="inline-flex min-h-9 items-center justify-center rounded-sm bg-[#0F172A] px-3 text-xs font-semibold text-white"
+          >
+            Adjust Stock
+          </Link>
+          <Link
+            href={`/inventory/ingredients?status=${ingredient.status}#ingredient-${ingredient.id}`}
+            className="inline-flex min-h-9 items-center justify-center rounded-sm border border-slate-300 bg-white px-3 text-xs font-semibold text-[#0F172A]"
+          >
+            View Ingredient
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StockAlertPanel({
+  title,
+  description,
+  ingredients,
+  status,
+  emptyMessage,
+  urgent = false,
+}: {
+  title: string;
+  description: string;
+  ingredients: InventoryIngredient[];
+  status: "low_stock" | "out_of_stock";
+  emptyMessage: string;
+  urgent?: boolean;
+}) {
+  const visible = ingredients.slice(0, 5);
+
+  return (
+    <section className={`rounded-sm bg-white p-6 shadow-sm ring-1 ${urgent ? "ring-red-100" : "ring-slate-200"}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-[#0F172A]">{title}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        {ingredients.length > 5 ? (
+          <Link href={`/inventory/ingredients?status=${status}`} className="text-sm font-semibold text-[#8A6811]">
+            View all {ingredients.length}
+          </Link>
+        ) : null}
+      </div>
+      <div className="mt-5 space-y-3">
+        {visible.map((ingredient) => (
+          <StockAlertRow key={ingredient.id} ingredient={ingredient} urgent={urgent} />
+        ))}
+        {!ingredients.length ? (
+          <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+            {emptyMessage}
+          </p>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -71,23 +165,24 @@ export function InventoryOverview({ data }: { data: InventoryData }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-sm bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold">Low & Out-of-Stock Alerts</h2>
-            <Link href="/inventory/ingredients" className="text-sm font-semibold text-[#8A6811]">Manage</Link>
-          </div>
-          <div className="mt-5 space-y-4">
-            {[...outOfStock, ...lowStock].slice(0, 6).map((ingredient) => (
-              <IngredientSummary key={ingredient.id} ingredient={ingredient} />
-            ))}
-            {!outOfStock.length && !lowStock.length ? (
-              <p className="rounded-sm bg-[#FBFAF7] p-4 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
-                No low-stock alerts yet. Set thresholds on ingredients to start tracking.
-              </p>
-            ) : null}
-          </div>
-        </section>
+        <StockAlertPanel
+          title="Out of Stock Ingredients"
+          description="Ingredients at zero stock. Review before service and adjust stock when replenished."
+          ingredients={outOfStock}
+          status="out_of_stock"
+          emptyMessage="No ingredients are out of stock."
+          urgent
+        />
+        <StockAlertPanel
+          title="Low Stock Ingredients"
+          description="Ingredients above zero but at or below their low-stock threshold."
+          ingredients={lowStock}
+          status="low_stock"
+          emptyMessage="No low-stock alerts yet."
+        />
+      </div>
 
+      <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-sm bg-white p-6 shadow-sm ring-1 ring-slate-200">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-2xl font-semibold">Recent Stock Movements</h2>

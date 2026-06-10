@@ -212,12 +212,21 @@ function ImportFromMenu({ data }: { data: InventoryData }) {
   );
 }
 
-export function InventoryIngredients({ data }: { data: InventoryData }) {
+const inventoryStatusFilters = ["in_stock", "low_stock", "out_of_stock"] as const;
+
+export function InventoryIngredients({
+  data,
+  initialStatus,
+}: {
+  data: InventoryData;
+  initialStatus?: string;
+}) {
+  const initialStatusFilter = inventoryStatusFilters.includes(initialStatus as never) ? initialStatus ?? "All" : "All";
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const currency = currencySymbol(data.restaurant.currency);
   const [category, setCategory] = useState("All");
-  const [status, setStatus] = useState("All");
+  const [status, setStatus] = useState(initialStatusFilter);
   const filtered = useMemo(
     () =>
       data.ingredients.filter((ingredient) => {
@@ -263,7 +272,7 @@ export function InventoryIngredients({ data }: { data: InventoryData }) {
         </div>
         <div className="mt-6 space-y-4">
           {filtered.map((ingredient) => (
-            <details key={ingredient.id} className="rounded-sm bg-[#FBFAF7] p-4 ring-1 ring-slate-200">
+            <details id={`ingredient-${ingredient.id}`} key={ingredient.id} className="scroll-mt-28 rounded-sm bg-[#FBFAF7] p-4 ring-1 ring-slate-200 target:ring-[#D4A017]">
               <summary className="cursor-pointer list-none">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <IngredientSummary ingredient={ingredient} />
