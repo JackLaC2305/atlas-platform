@@ -431,6 +431,7 @@ type NestedIngredient = {
   ingredient_name?: unknown;
   quantity?: unknown;
   unit?: unknown;
+  inventory_ingredient_id?: unknown;
 };
 
 function parseNestedRows<T>(value: string): T[] {
@@ -557,6 +558,7 @@ export async function saveMenuItemAction(
     await Promise.all([
       supabase.from("menu_item_variant_groups").delete().eq("restaurant_id", restaurantId).eq("menu_item_id", savedItemId),
       supabase.from("menu_item_addon_groups").delete().eq("restaurant_id", restaurantId).eq("menu_item_id", savedItemId),
+      supabase.from("inventory_menu_links").delete().eq("restaurant_id", restaurantId).eq("menu_item_id", savedItemId),
       supabase.from("menu_item_ingredients").delete().eq("restaurant_id", restaurantId).eq("menu_item_id", savedItemId),
     ]);
 
@@ -622,18 +624,47 @@ export async function saveMenuItemAction(
 
     const ingredients = parseNestedRows<NestedIngredient>(text(formData, "ingredients"));
     if (ingredients.length) {
-      await supabase.from("menu_item_ingredients").insert(
-        ingredients
-          .filter((ingredient) => ingredient.ingredient_name)
-          .map((ingredient, index) => ({
+      for (const [index, ingredient] of ingredients.filter((ingredient) => ingredient.ingredient_name).entries()) {
+        const inventoryIngredientId =
+          typeof ingredient.inventory_ingredient_id === "string" && ingredient.inventory_ingredient_id
+            ? ingredient.inventory_ingredient_id
+            : null;
+        const { data: menuIngredient, error: ingredientError } = await supabase
+          .from("menu_item_ingredients")
+          .insert({
             restaurant_id: restaurantId,
             menu_item_id: savedItemId,
             ingredient_name: String(ingredient.ingredient_name),
             quantity: ingredient.quantity ? parseNumber(String(ingredient.quantity)) : null,
             unit: ingredient.unit ? String(ingredient.unit) : null,
             sort_order: index,
-          })),
-      );
+          })
+          .select("id")
+          .single();
+
+        if (ingredientError) throw new Error(ingredientError.message);
+
+        if (inventoryIngredientId && menuIngredient) {
+          const { data: inventoryIngredient } = await supabase
+            .from("inventory_ingredients")
+            .select("id")
+            .eq("restaurant_id", restaurantId)
+            .eq("id", inventoryIngredientId)
+            .maybeSingle();
+
+          if (inventoryIngredient) {
+            const { error: linkError } = await supabase.from("inventory_menu_links").insert({
+              restaurant_id: restaurantId,
+              inventory_ingredient_id: inventoryIngredient.id,
+              menu_item_id: savedItemId,
+              menu_item_ingredient_id: menuIngredient.id,
+              quantity_per_item: ingredient.quantity ? parseNumber(String(ingredient.quantity)) : 0,
+              unit: ingredient.unit ? String(ingredient.unit) : "unit",
+            });
+            if (linkError) throw new Error(linkError.message);
+          }
+        }
+      }
     }
   } catch (nestedError) {
     return {
@@ -714,11 +745,13 @@ export async function duplicateMenuItemAction(formData: FormData): Promise<void>
   const [
     { data: images },
     { data: ingredients },
+    { data: inventoryLinks },
     { data: variantGroups },
     { data: addonGroups },
   ] = await Promise.all([
     supabase.from("menu_item_images").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", itemId),
     supabase.from("menu_item_ingredients").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", itemId),
+    supabase.from("inventory_menu_links").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", itemId),
     supabase.from("menu_item_variant_groups").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", itemId),
     supabase.from("menu_item_addon_groups").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", itemId),
   ]);
@@ -735,16 +768,31 @@ export async function duplicateMenuItemAction(formData: FormData): Promise<void>
     );
   }
   if (ingredients?.length) {
-    await supabase.from("menu_item_ingredients").insert(
-      ingredients.map((ingredient) => ({
-        restaurant_id: restaurantId,
-        menu_item_id: newItem.id,
-        ingredient_name: ingredient.ingredient_name,
-        quantity: ingredient.quantity,
-        unit: ingredient.unit,
-        sort_order: ingredient.sort_order,
-      })),
-    );
+    for (const ingredient of ingredients) {
+      const { data: newIngredient } = await supabase
+        .from("menu_item_ingredients")
+        .insert({
+          restaurant_id: restaurantId,
+          menu_item_id: newItem.id,
+          ingredient_name: ingredient.ingredient_name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          sort_order: ingredient.sort_order,
+        })
+        .select("id")
+        .single();
+      const link = inventoryLinks?.find((itemLink) => itemLink.menu_item_ingredient_id === ingredient.id);
+      if (newIngredient && link) {
+        await supabase.from("inventory_menu_links").insert({
+          restaurant_id: restaurantId,
+          inventory_ingredient_id: link.inventory_ingredient_id,
+          menu_item_id: newItem.id,
+          menu_item_ingredient_id: newIngredient.id,
+          quantity_per_item: link.quantity_per_item,
+          unit: link.unit,
+        });
+      }
+    }
   }
   for (const group of variantGroups ?? []) {
     const { data: newGroup } = await supabase
@@ -933,12 +981,18 @@ export async function duplicateMenuAction(formData: FormData): Promise<void> {
       const [
         { data: images },
         { data: ingredients },
+        { data: inventoryLinks },
         { data: variantGroups },
         { data: addonGroups },
       ] = await Promise.all([
         supabase.from("menu_item_images").select("*").eq("restaurant_id", restaurantId).eq("menu_item_id", item.id),
         supabase
           .from("menu_item_ingredients")
+          .select("*")
+          .eq("restaurant_id", restaurantId)
+          .eq("menu_item_id", item.id),
+        supabase
+          .from("inventory_menu_links")
           .select("*")
           .eq("restaurant_id", restaurantId)
           .eq("menu_item_id", item.id),
@@ -965,16 +1019,31 @@ export async function duplicateMenuAction(formData: FormData): Promise<void> {
         );
       }
       if (ingredients?.length) {
-        await supabase.from("menu_item_ingredients").insert(
-          ingredients.map((ingredient) => ({
-            restaurant_id: restaurantId,
-            menu_item_id: newItem.id,
-            ingredient_name: ingredient.ingredient_name,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            sort_order: ingredient.sort_order,
-          })),
-        );
+        for (const ingredient of ingredients) {
+          const { data: newIngredient } = await supabase
+            .from("menu_item_ingredients")
+            .insert({
+              restaurant_id: restaurantId,
+              menu_item_id: newItem.id,
+              ingredient_name: ingredient.ingredient_name,
+              quantity: ingredient.quantity,
+              unit: ingredient.unit,
+              sort_order: ingredient.sort_order,
+            })
+            .select("id")
+            .single();
+          const link = inventoryLinks?.find((itemLink) => itemLink.menu_item_ingredient_id === ingredient.id);
+          if (newIngredient && link) {
+            await supabase.from("inventory_menu_links").insert({
+              restaurant_id: restaurantId,
+              inventory_ingredient_id: link.inventory_ingredient_id,
+              menu_item_id: newItem.id,
+              menu_item_ingredient_id: newIngredient.id,
+              quantity_per_item: link.quantity_per_item,
+              unit: link.unit,
+            });
+          }
+        }
       }
       for (const group of variantGroups ?? []) {
         const { data: newGroup } = await supabase

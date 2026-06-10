@@ -46,6 +46,8 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
   const [ingredientFilter, setIngredientFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
   const [movementType, setMovementType] = useState<keyof typeof adjustmentOptions>("add");
+  const [selectedIngredientId, setSelectedIngredientId] = useState("");
+  const selectedIngredient = data.ingredients.find((ingredient) => ingredient.id === selectedIngredientId);
   const filteredMovements = useMemo(
     () =>
       data.movements.filter((movement) => {
@@ -70,13 +72,29 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
           <h2 className="text-2xl font-semibold">Add Adjustment</h2>
           <label className="block text-sm font-semibold text-slate-700">
             Ingredient *
-            <select name="ingredientId" required className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
+            <select
+              name="ingredientId"
+              required
+              value={selectedIngredientId}
+              onChange={(event) => setSelectedIngredientId(event.target.value)}
+              className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm"
+            >
               <option value="">Select ingredient</option>
               {data.ingredients.map((ingredient) => (
                 <option key={ingredient.id} value={ingredient.id}>{ingredient.name} · {formatQuantity(ingredient.current_stock, ingredient.unit)}</option>
               ))}
             </select>
           </label>
+          {selectedIngredient ? (
+            <div className="rounded-sm bg-[#FBFAF7] p-4 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+              Current stock:{" "}
+              <span className="font-semibold text-[#0F172A]">
+                {selectedIngredient.stock_tracking_mode === "approximate" ? "Approx. " : ""}
+                {formatQuantity(selectedIngredient.current_stock, selectedIngredient.unit)}
+                {selectedIngredient.package_description ? ` — ${selectedIngredient.package_description}` : ""}
+              </span>
+            </div>
+          ) : null}
           <label className="block text-sm font-semibold text-slate-700">
             Adjustment Type *
             <select name="movementType" value={movementType} onChange={(event) => setMovementType(event.target.value as keyof typeof adjustmentOptions)} className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm">
@@ -88,7 +106,12 @@ export function InventoryAdjustments({ data }: { data: InventoryData }) {
           </label>
           <label className="block text-sm font-semibold text-slate-700">
             Quantity *
-            <input name="quantity" type="number" step="0.001" min="0" required className="mt-2 w-full rounded-sm border border-slate-200 px-4 py-3 text-sm" />
+            <div className="mt-2 flex overflow-hidden rounded-sm border border-slate-200 bg-white">
+              <input name="quantity" type="number" step="0.001" min="0" required className="min-w-0 flex-1 px-4 py-3 text-sm outline-none" />
+              <span className="border-l border-slate-200 bg-[#FBFAF7] px-4 py-3 text-sm font-semibold text-slate-600">
+                {selectedIngredient?.unit ?? "unit"}
+              </span>
+            </div>
           </label>
           <label className="block text-sm font-semibold text-slate-700">
             Reason *

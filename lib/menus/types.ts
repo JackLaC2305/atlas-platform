@@ -142,6 +142,13 @@ export type Ingredient = {
   quantity: number | null;
   unit: string | null;
   sort_order: number;
+  inventory_ingredient_id?: string | null;
+};
+
+export type MenuInventoryIngredient = {
+  id: string;
+  name: string;
+  unit: string;
 };
 
 export type MenuItemFull = MenuItem & {
@@ -163,5 +170,6 @@ export type MenuManagementData = {
   restaurant: RestaurantSummary;
   logoUrl: string | null;
   menus: MenuFull[];
+  inventoryIngredients: MenuInventoryIngredient[];
   canManage: boolean;
 };

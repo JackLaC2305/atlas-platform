@@ -27,6 +27,7 @@ import {
   menuStatuses,
   type MenuCategoryFull,
   type MenuFull,
+  type MenuInventoryIngredient,
   type MenuItemFull,
   type MenuManagementData,
   type AvailabilityType,
@@ -36,7 +37,13 @@ const initialActionState: MenuActionState = { status: "idle", message: "" };
 
 type VariantDraft = { name: string; is_required: boolean; options: { name: string; price_delta: string }[] };
 type AddonDraft = { name: string; max_selections: string; options: { name: string; price_delta: string }[] };
-type IngredientDraft = { ingredient_name: string; quantity: string; unit: string; custom_unit: string };
+type IngredientDraft = {
+  inventory_ingredient_id: string;
+  ingredient_name: string;
+  quantity: string;
+  unit: string;
+  custom_unit: string;
+};
 
 const ingredientUnits = [
   "gram",
@@ -295,6 +302,7 @@ function NestedBuilder({
   setAddonGroups,
   ingredients,
   setIngredients,
+  inventoryIngredients,
 }: {
   currency: string;
   variantGroups: VariantDraft[];
@@ -303,6 +311,7 @@ function NestedBuilder({
   setAddonGroups: (value: AddonDraft[]) => void;
   ingredients: IngredientDraft[];
   setIngredients: (value: IngredientDraft[]) => void;
+  inventoryIngredients: MenuInventoryIngredient[];
 }) {
   const symbol = currencySymbol(currency);
 
@@ -377,11 +386,34 @@ function NestedBuilder({
             <p className="text-sm font-semibold">Ingredients</p>
             <p className="mt-1 text-xs text-slate-500">Ingredients are optional, but adding them enables future inventory tracking and low-stock insights.</p>
           </div>
-          <button type="button" onClick={() => setIngredients([...ingredients, { ingredient_name: "", quantity: "", unit: "", custom_unit: "" }])} className="text-sm font-semibold text-[#9A7412]">Add Ingredient</button>
+          <button type="button" onClick={() => setIngredients([...ingredients, { inventory_ingredient_id: "", ingredient_name: "", quantity: "", unit: "", custom_unit: "" }])} className="text-sm font-semibold text-[#9A7412]">Add Ingredient</button>
         </div>
+        <p className="mt-3 rounded-sm bg-white p-3 text-xs leading-5 text-slate-500 ring-1 ring-slate-200">
+          Link to an inventory ingredient to enable automatic stock deduction.
+          {!inventoryIngredients.length ? " No inventory ingredients yet. You can type ingredients now and import them later from Inventory." : ""}
+        </p>
         {ingredients.map((ingredient, index) => (
-          <div key={index} className="mt-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_0.8fr_auto]">
-            <input value={ingredient.ingredient_name} onChange={(event) => setIngredients(ingredients.map((item, idx) => idx === index ? { ...item, ingredient_name: event.target.value } : item))} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" placeholder="Ingredient" />
+          <div key={index} className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_0.7fr_0.8fr_auto]">
+            <select
+              value={ingredient.inventory_ingredient_id}
+              onChange={(event) => {
+                const selected = inventoryIngredients.find((item) => item.id === event.target.value);
+                setIngredients(ingredients.map((item, idx) => idx === index ? {
+                  ...item,
+                  inventory_ingredient_id: event.target.value,
+                  ingredient_name: selected?.name ?? item.ingredient_name,
+                  unit: selected?.unit ? displayUnit(selected.unit) : item.unit,
+                  custom_unit: selected?.unit ? customUnit(selected.unit) : item.custom_unit,
+                } : item));
+              }}
+              className="rounded-sm border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">Custom ingredient</option>
+              {inventoryIngredients.map((item) => (
+                <option key={item.id} value={item.id}>{item.name} · {item.unit}</option>
+              ))}
+            </select>
+            <input value={ingredient.ingredient_name} onChange={(event) => setIngredients(ingredients.map((item, idx) => idx === index ? { ...item, inventory_ingredient_id: "", ingredient_name: event.target.value } : item))} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" placeholder="Ingredient" />
             <input value={ingredient.quantity} onChange={(event) => setIngredients(ingredients.map((item, idx) => idx === index ? { ...item, quantity: event.target.value } : item))} className="rounded-sm border border-slate-200 px-3 py-2 text-sm" placeholder="Quantity" />
             <div className="space-y-2">
               <select value={ingredient.unit} onChange={(event) => setIngredients(ingredients.map((item, idx) => idx === index ? { ...item, unit: event.target.value, custom_unit: event.target.value === "other" ? item.custom_unit : "" } : item))} className="w-full rounded-sm border border-slate-200 px-3 py-2 text-sm">
@@ -407,11 +439,13 @@ function NestedBuilder({
 function ItemForm({
   restaurantId,
   menu,
+  inventoryIngredients,
   item,
   onDone,
 }: {
   restaurantId: string;
   menu: MenuFull;
+  inventoryIngredients: MenuInventoryIngredient[];
   item?: MenuItemFull;
   onDone: () => void;
 }) {
@@ -434,6 +468,7 @@ function ItemForm({
   );
   const [ingredients, setIngredients] = useState<IngredientDraft[]>(
     item?.ingredients.map((ingredient) => ({
+      inventory_ingredient_id: ingredient.inventory_ingredient_id ?? "",
       ingredient_name: ingredient.ingredient_name,
       quantity: ingredient.quantity ? String(ingredient.quantity) : "",
       unit: displayUnit(ingredient.unit),
@@ -517,6 +552,7 @@ function ItemForm({
         setAddonGroups={setAddonGroups}
         ingredients={ingredients}
         setIngredients={setIngredients}
+        inventoryIngredients={inventoryIngredients}
       />
       <ActionMessage state={state} />
       <div className="flex gap-3">
@@ -913,9 +949,9 @@ export function MenuManagement({
                 <div className="space-y-6">
                   <CategoryForm restaurantId={data.restaurant.id} menuId={selectedMenu.id} />
                   {editingItem ? (
-                    <ItemForm key={editingItem.id} restaurantId={data.restaurant.id} menu={selectedMenu} item={editingItem} onDone={() => setEditingItem(undefined)} />
+                    <ItemForm key={editingItem.id} restaurantId={data.restaurant.id} menu={selectedMenu} inventoryIngredients={data.inventoryIngredients} item={editingItem} onDone={() => setEditingItem(undefined)} />
                   ) : (
-                    <ItemForm key="new-item" restaurantId={data.restaurant.id} menu={selectedMenu} onDone={() => setEditingItem(undefined)} />
+                    <ItemForm key="new-item" restaurantId={data.restaurant.id} menu={selectedMenu} inventoryIngredients={data.inventoryIngredients} onDone={() => setEditingItem(undefined)} />
                   )}
                   {selectedMenu.categories.map((category, index) => (
                     <section key={category.id} className="rounded-sm bg-[#FBFAF7] p-5 ring-1 ring-slate-200">

@@ -8,6 +8,7 @@ import type {
   MenuItem,
   MenuItemImage,
   MenuManagementData,
+  MenuInventoryIngredient,
   Variant,
   VariantGroup,
 } from "@/lib/menus/types";
@@ -44,6 +45,8 @@ export async function getMenuManagementData(
     addonGroupsResult,
     addonsResult,
     ingredientsResult,
+    inventoryIngredientsResult,
+    inventoryLinksResult,
   ] = await Promise.all([
     supabase.from("menus").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
     supabase
@@ -78,6 +81,15 @@ export async function getMenuManagementData(
       .select("*")
       .eq("restaurant_id", restaurantId)
       .order("sort_order"),
+    supabase
+      .from("inventory_ingredients")
+      .select("id, name, unit")
+      .eq("restaurant_id", restaurantId)
+      .order("name"),
+    supabase
+      .from("inventory_menu_links")
+      .select("menu_item_ingredient_id, inventory_ingredient_id")
+      .eq("restaurant_id", restaurantId),
   ]);
 
   const menus = (menusResult.data ?? []) as Menu[];
@@ -88,7 +100,20 @@ export async function getMenuManagementData(
   const variants = (variantsResult.data ?? []) as Variant[];
   const addonGroups = (addonGroupsResult.data ?? []) as Omit<AddonGroup, "addons">[];
   const addons = (addonsResult.data ?? []) as Addon[];
-  const ingredients = (ingredientsResult.data ?? []) as Ingredient[];
+  const inventoryLinks = (inventoryLinksResult.data ?? []) as {
+    menu_item_ingredient_id: string | null;
+    inventory_ingredient_id: string;
+  }[];
+  const linkedInventoryByMenuIngredient = new Map(
+    inventoryLinks
+      .filter((link) => link.menu_item_ingredient_id)
+      .map((link) => [link.menu_item_ingredient_id as string, link.inventory_ingredient_id]),
+  );
+  const ingredients = ((ingredientsResult.data ?? []) as Ingredient[]).map((ingredient) => ({
+    ...ingredient,
+    inventory_ingredient_id: linkedInventoryByMenuIngredient.get(ingredient.id) ?? null,
+  }));
+  const inventoryIngredients = (inventoryIngredientsResult.data ?? []) as MenuInventoryIngredient[];
 
   const fullMenus: MenuFull[] = menus.map((menu) => ({
     ...menu,
@@ -122,6 +147,7 @@ export async function getMenuManagementData(
     restaurant: context.restaurant,
     logoUrl: context.logoUrl,
     menus: fullMenus,
+    inventoryIngredients,
     canManage: context.membership.role === "owner",
   };
 }
