@@ -32,6 +32,8 @@ body {
   html,
   body {
     background: #ffffff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .qr-print-controls {
@@ -54,5 +56,13 @@ body {
     break-inside: avoid;
     page-break-inside: avoid;
     box-shadow: none !important;
+  }
+
+  .qr-print-brand,
+  .qr-print-brand * {
+    display: inline-flex !important;
+    visibility: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { AtlasFullLogo } from "@/components/brand/atlas-logo";
-
 type PrintSize = "table" | "a5" | "a4";
 
 type QrPrintCardProps = {
@@ -20,6 +18,29 @@ const sizeStyles: Record<PrintSize, string> = {
   a5: "max-w-[560px] px-12 py-14",
   a4: "max-w-[760px] px-16 py-16",
 };
+
+function PrintableAtlasBrand() {
+  return (
+    <div className="qr-print-brand inline-flex items-center justify-center gap-4 text-[#0F172A]">
+      <svg
+        aria-hidden="true"
+        className="h-12 w-12 shrink-0"
+        viewBox="0 0 48 48"
+        role="img"
+      >
+        <rect x="1" y="1" width="46" height="46" rx="3" fill="#FFFFFF" stroke="#D8D1C2" strokeWidth="2" />
+        <rect x="10" y="10" width="11" height="11" rx="1.5" fill="#0F172A" />
+        <rect x="27" y="10" width="11" height="11" rx="1.5" fill="#D4A017" />
+        <rect x="10" y="27" width="11" height="11" rx="1.5" fill="#0F172A" />
+        <rect x="27" y="27" width="11" height="11" rx="1.5" fill="#0F172A" />
+      </svg>
+      <span className="flex flex-col text-left">
+        <span className="text-3xl font-semibold leading-none text-[#0F172A]">Atlas</span>
+        <span className="mt-2 text-sm font-medium text-slate-500">by Martello Hospitality</span>
+      </span>
+    </div>
+  );
+}
 
 export function QrPrintCard({
   restaurantName,
@@ -99,7 +120,7 @@ export function QrPrintCard({
             <p className="mt-6 max-w-sm break-all text-xs leading-5 text-slate-500">{destinationUrl}</p>
 
             <div className="mt-9 border-t border-slate-200 pt-6">
-              <AtlasFullLogo className="justify-center" />
+              <PrintableAtlasBrand />
               <p className="mt-4 text-xs font-medium text-slate-500">
                 A Martello Hospitality Company
               </p>

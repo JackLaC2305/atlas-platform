@@ -20,7 +20,7 @@ type QrPrintData = {
 };
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function debugQrPrint(step: string, details: Record<string, unknown>) {
@@ -39,10 +39,8 @@ async function createSignedLogoUrl(
 
 export default async function QrPrintPage({ params }: QrPrintPageProps) {
   const { qrLinkId } = await params;
-  debugQrPrint("route-param", { qrLinkId });
 
   if (!isUuid(qrLinkId)) {
-    debugQrPrint("invalid-param", { qrLinkId });
     debugQrPrint("not-found", { reason: "invalid qrLinkId param", qrLinkId });
     notFound();
   }
@@ -51,33 +49,14 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  debugQrPrint("auth", { hasUser: Boolean(user), userId: user?.id });
 
   if (!user) {
     debugQrPrint("redirect-login", { reason: "no authenticated user", qrLinkId });
     redirect("/login");
   }
 
-  const { data: memberships, error: membershipsError } = await supabase
-    .from("restaurant_members")
-    .select("restaurant_id")
-    .eq("user_id", user.id);
-  debugQrPrint("memberships", {
-    count: memberships?.length ?? 0,
-    error: membershipsError?.message ?? null,
-  });
-
   const { data, error } = await supabase.rpc("get_qr_print_card", {
     qr_link_id_input: qrLinkId,
-  });
-
-  debugQrPrint("qr-print-rpc", {
-    qrLinkId,
-    dataLength: Array.isArray(data) ? data.length : data ? 1 : 0,
-    found: Array.isArray(data) ? data.length > 0 : Boolean(data),
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    restaurantId: Array.isArray(data) && data[0] ? data[0].restaurant_id : null,
   });
 
   const qrLink = Array.isArray(data) ? (data[0] as QrPrintData | undefined) : null;
@@ -105,7 +84,6 @@ export default async function QrPrintPage({ params }: QrPrintPageProps) {
       errorCorrectionLevel: "M",
     }),
   ]);
-  debugQrPrint("assets", { hasLogoPath: Boolean(qrLink.restaurant_logo_path), hasSignedLogo: Boolean(logoUrl) });
 
   return (
     <QrPrintCard
